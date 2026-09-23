@@ -4,12 +4,13 @@ import { useState } from "react";
 import UploadZone from "@/components/UploadZone";
 import HelpDialog from "@/components/HelpDialog";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import DetectionReport from "@/components/DetectionReport";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<any>(null);
 
   async function handleAnalyze() {
     if (!file) return;
@@ -60,12 +61,16 @@ export default function Home() {
       </button>
 
       {/* TEMPORARY raw output -- real report screen comes Day 7 */}
-      {result ? (
-        <pre className="mt-6 bg-gray-100 text-black p-4 rounded text-xs overflow-auto">
-          {JSON.stringify(result, null, 2)}
-        </pre>
+      {result && !result.error ? (
+        <DetectionReport
+          result={result}
+          onReturnHome={() => { setFile(null); setResult(null); }}
+        />
       ) : null}
-
+      {result?.error ? (
+        <p className="mt-6 text-red-600 text-sm">{result.error}</p>
+      ) : null}
+  
       {showHelp ? <HelpDialog onClose={() => setShowHelp(false)} /> : null}
       {isAnalyzing ? <LoadingSpinner /> : null}
     </div>
