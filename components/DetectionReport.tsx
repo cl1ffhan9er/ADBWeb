@@ -4,12 +4,15 @@ import { useState } from "react";
 import { getScoreBand } from "@/lib/scoreBands";
 import ScoreExplainerDialog from "@/components/ScoreExplainerDialog";
 
+type ChunkResult = { chunk_index: number; label: string; score: number };
+
 type DetectionReportProps = {
   result: {
     filename: string;
     duration_seconds: number;
     overall_label: string;
     overall_score: number;
+    chunks?: ChunkResult[];
   };
   onReturnHome: () => void;
 };
@@ -45,6 +48,27 @@ export default function DetectionReport({ result, onReturnHome }: DetectionRepor
           <dd className="font-medium">{result.duration_seconds}s</dd>
         </div>
       </dl>
+
+      {result.chunks && result.chunks.length > 1 ? (
+        <div className="mt-6">
+          <p className="text-sm font-medium text-gray-700 mb-2">Per-Chunk Results</p>
+          <div className="space-y-2">
+            {result.chunks.map((chunk) => {
+              const chunkBand = getScoreBand(chunk.score);
+              return (
+                <div
+                  key={chunk.chunk_index}
+                  className="flex justify-between items-center text-sm border border-gray-100 rounded px-3 py-2"
+                >
+                  <span className="text-gray-500">Chunk {chunk.chunk_index + 1}</span>
+                  <span className={`px-2 py-0.5 rounded ${chunkBand.colorClass}`}>{chunkBand.label}</span>
+                  <span className="text-gray-500">{chunk.score.toFixed(4)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <button
         onClick={onReturnHome}
