@@ -52,56 +52,40 @@ export default function UploadZone({ onFileAccepted, onFileCleared }: UploadZone
     onFileCleared();
   }
 
-  // --- Error state (Fig 3.1.3) ---
-  if (error) {
-    return (
-      <div className="border-2 border-red-400 bg-red-50 rounded-lg p-6 text-center">
-        <p className="text-red-700 font-medium">{error}</p>
-        <button
-          onClick={handleClear}
-          className="mt-3 text-sm underline text-red-700"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  // --- Uploaded state (Fig 3.1.2) ---
-  if (selectedFile) {
-    return (
-      <div className="border-2 border-gray-300 rounded-lg p-6 flex items-center justify-between">
-        <div>
-          <p className="font-medium">{selectedFile.name}</p>
-          <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
-        </div>
-        <button onClick={handleClear} className="text-sm text-gray-500 underline">
-          Clear
-        </button>
-      </div>
-    );
-  }
-
-  // --- Empty / upload state (Fig 3.1.1) ---
   return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={handleDrop}
-      onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
-        isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
-      }`}
-    >
-      <p className="text-gray-600">Drag and drop an audio file, or click to browse</p>
-      <p className="text-sm text-gray-400 mt-1">.wav or .mp3 &middot; 3&ndash;60 seconds &middot; max 10MB</p>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".wav,.mp3"
-        onChange={handleBrowseChange}
-        className="hidden"
-      />
+    <div className="h-48 w-full">
+      {error ? (
+        <div className="h-full w-full border-2 border-red-400 bg-red-50 rounded-lg flex flex-col items-center justify-center text-center px-6">
+          <p className="text-red-700 font-medium">{error}</p>
+          <button onClick={handleClear} className="mt-3 text-sm underline text-red-700">
+            Try again
+          </button>
+        </div>
+      ) : selectedFile ? (
+        <div className="h-full w-full border-2 border-gray-300 rounded-lg flex items-center justify-between px-6">
+          <div>
+            <p className="font-medium">{selectedFile.name}</p>
+            <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
+          </div>
+          <button onClick={handleClear} className="text-sm text-gray-500 underline">
+            Clear
+          </button>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`h-full w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-center cursor-pointer transition-colors px-6 ${
+            isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+          }`}
+        >
+          <p className="text-gray-600">Drag and drop an audio file, or click to browse</p>
+          <p className="text-sm text-gray-400 mt-1">.wav or .mp3 &middot; 3&ndash;60 seconds &middot; max 10MB</p>
+          <input ref={inputRef} type="file" accept=".wav,.mp3" onChange={handleBrowseChange} className="hidden" />
+        </div>
+      )}
     </div>
   );
 }

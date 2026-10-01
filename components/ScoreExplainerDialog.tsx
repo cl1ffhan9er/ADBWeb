@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+
 const BANDS = [
   { range: "0.0 – 0.2", label: "Highly Likely Real" },
   { range: "0.2 – 0.4", label: "Likely Real" },
@@ -9,8 +11,10 @@ const BANDS = [
 ];
 
 export default function ScoreExplainerDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
       <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Authenticity Score</h2>
@@ -30,6 +34,7 @@ export default function ScoreExplainerDialog({ onClose }: { onClose: () => void 
           </tbody>
         </table>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
