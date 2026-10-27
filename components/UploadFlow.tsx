@@ -11,8 +11,7 @@ import { getExpectedChunkCount } from "@/lib/chunking";
 import { useEffect } from "react";
 import ErrorBanner from "@/components/ErrorBanner";
 import { motion } from "motion/react";
-import ReportSheet from "@/components/ReportSheet";
-import NoDataYet from "@/components/NoDataYet"
+import ReportModal from "@/components/ReportModal";
 
 export default function UploadFlow() {
   const [file, setFile] = useState<File | null>(null);
@@ -55,7 +54,6 @@ export default function UploadFlow() {
 
     const totalChunks = audioDuration ? getExpectedChunkCount(audioDuration) : 1;
     const TICK_MS = 400;
-    const minDisplayMs = totalChunks > 1 ? totalChunks * TICK_MS : 0;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -70,7 +68,6 @@ export default function UploadFlow() {
       }, TICK_MS);
     }
 
-    const startTime = Date.now();
     const formData = new FormData();
     formData.append("file", file);
 
@@ -81,11 +78,6 @@ export default function UploadFlow() {
         signal: controller.signal,
       });
       const data = await response.json();
-
-      const elapsed = Date.now() - startTime;
-      if (elapsed < minDisplayMs) {
-        await new Promise((resolve) => setTimeout(resolve, minDisplayMs - elapsed));
-      }
 
       setResult(data);
       setCurrentChunk(totalChunks);
@@ -121,7 +113,7 @@ export default function UploadFlow() {
           </button>
         </div>
 
-        <UploadZone onFileAccepted={handleFileAccepted} onFileCleared={handleFileCleared} />
+        <UploadZone onFileAccepted={handleFileAccepted} onFileCleared={handleFileCleared} disabled={isAnalyzing} />
 
         <button
           onClick={handleAnalyze}
@@ -132,9 +124,19 @@ export default function UploadFlow() {
         </button>
     
 
-        <ReportSheet isOpen={showReport} onToggle={() => setShowReport((prev) => !prev)}>
-            {result && !result.error ? <DetectionReport result={result} /> : <NoDataYet/>}
-        </ReportSheet>
+        {result && !result.error && !showReport ? (
+          <button
+            type="button"
+            onClick={() => setShowReport(true)}
+            className="w-full py-2 text-sm font-medium text-adb-500 hover:underline"
+          >
+            View detection report
+          </button>
+        ) : null}
+
+        <ReportModal isOpen={showReport && !!result && !result.error} onClose={() => setShowReport(false)}>
+          {result && !result.error ? <DetectionReport result={result} fileSizeBytes={file?.size} /> : null}
+        </ReportModal>
 
         {result?.error ? (
           <ErrorBanner

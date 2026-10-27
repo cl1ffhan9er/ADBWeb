@@ -1,38 +1,34 @@
 "use client";
 
 import { createPortal } from "react-dom";
-
-const BANDS = [
-  { range: "0.0 – 0.2", label: "Highly Likely Real" },
-  { range: "0.2 – 0.4", label: "Likely Real" },
-  { range: "0.4 – 0.6", label: "Uncertain" },
-  { range: "0.6 – 0.8", label: "Likely Fake" },
-  { range: "0.8 – 1.0", label: "Highly Likely Fake" },
-];
+import { SCORE_BANDS } from "@/lib/scoreBands";
 
 export default function ScoreExplainerDialog({ onClose }: { onClose: () => void }) {
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-      <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+      <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Authenticity Score</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
         <p className="text-sm text-gray-600 mb-4">
-          A score from 0 to 1 representing the model&apos;s confidence that the audio is synthetic.
+          The <strong>Authenticity Score</strong> shows how likely your audio is to be real human speech or
+          AI-generated speech. A higher score means the audio appears more likely to be real, while a lower
+          score means it appears more likely to be AI-generated. Audio scoring 50 or above is classified as real.
         </p>
-        <table className="w-full text-sm">
-          <tbody>
-            {BANDS.map((b) => (
-              <tr key={b.label} className="border-t border-gray-100">
-                <td className="py-2 text-gray-500">{b.range}</td>
-                <td className="py-2 font-medium">{b.label}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="space-y-3 text-sm">
+          {SCORE_BANDS.map((b) => (
+            <li key={b.label}>
+              <p className="font-semibold">
+                {b.range} — {b.label}
+              </p>
+              <p className="text-gray-600">{b.description}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-xs text-gray-500">The score is a rescaled model output, not a probability.</p>
       </div>
     </div>,
     document.body

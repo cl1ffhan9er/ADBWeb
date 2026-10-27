@@ -1,87 +1,155 @@
-import ffmpeg
 import io
-import math
-import tempfile
 import os
+import tempfile
+from fractions import Fraction
 
-TARGET_SAMPLE_RATE = 16000
-CHUNK_DURATION_SECONDS = 10
+import ffmpeg
+import numpy as np
+import soundfile as sf
+
+TARGET_SR = 16000
+SEGMENT_SAMPLES = 64600
+
+FRAME_LEN = 400
+FRAME_HOP = 160
+TRIM_TOP_DB = 40.0
+TRIM_MARGIN_S = 0.05
+PEAK_TARGET = 1.0
 
 
-def standardize_audio(audio_bytes: bytes) -> bytes:
-    """
-    Converts raw uploaded audio (any format/sample rate/channel count)
-    into 16kHz, mono, WAV — the format the model expects.
-
-    Takes raw bytes in, returns standardized WAV bytes out.
-    Everything happens in memory — nothing is written to disk.
-    """
+def decode_audio(audio_bytes: bytes) -> tuple[np.ndarray, int]:
+    fd, tmp_path = tempfile.mkstemp(suffix=".upload")
     try:
-        out, _ = (
-            ffmpeg
-            .input("pipe:0")
-            .output(
-                "pipe:1",
-                format="wav",
-                ac=1,                  # mono
-                ar=TARGET_SAMPLE_RATE,  # 16kHz
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(audio_bytes)
+
+        try:
+            probe = ffmpeg.probe(tmp_path)
+            audio_streams = [s for s in probe["streams"] if s.get("codec_type") == "audio"]
+            if not audio_streams:
+                raise ValueError("The file contains no audio stream.")
+            sr = int(audio_streams[0]["sample_rate"])
+            channels = int(audio_streams[0]["channels"])
+
+            out, _ = (
+                ffmpeg.input(tmp_path)
+                .output("pipe:1", format="f32le", acodec="pcm_f32le")
+                .run(capture_stdout=True, capture_stderr=True)
             )
-            .run(input=audio_bytes, capture_stdout=True, capture_stderr=True)
-        )
-        return out
-    except ffmpeg.Error as e:
-        # ffmpeg failed -- likely a corrupted or unsupported file
-        raise ValueError(f"Audio standardization failed: {e.stderr.decode()}")
-
-
-def get_duration_seconds(audio_bytes: bytes) -> float:
-    """
-    Uses ffprobe (bundled with ffmpeg) to check how long the audio is,
-    without fully decoding it. Needed for chunking and for validating
-    against REQ-UPLOAD-7 (3-60 second range).
-    """
-    with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as tmp:
-        tmp.write(audio_bytes)
-        tmp_path = tmp.name
-
-    try:
-        probe = ffmpeg.probe(tmp_path)
-        return float(probe["format"]["duration"])
+        except ffmpeg.Error as e:
+            print(f"[audio] ffmpeg failed: {e.stderr.decode(errors='ignore')[-500:]}")
+            raise ValueError("Could not read the audio file. It may be corrupted or in an unsupported format.")
     finally:
         os.remove(tmp_path)
 
+    x = np.frombuffer(out, dtype=np.float32)
+    if channels > 1:
+        x = x[: len(x) - len(x) % channels].reshape(-1, channels).mean(axis=1)
 
-def split_into_chunks(standardized_wav_bytes: bytes, duration: float) -> list[bytes]:
-    """
-    Splits standardized WAV audio into fixed 10-second chunks.
-    The final chunk is padded with silence if it's shorter than 10s,
-    since the model expects a fixed input duration.
+    if x.size == 0:
+        raise ValueError("The file contains no audio samples.")
 
-    If the audio is already <= 10s, returns a single-item list
-    (the whole thing, padded to 10s).
-    """
-    num_chunks = math.ceil(duration / CHUNK_DURATION_SECONDS)
-    chunks = []
+    return x.astype(np.float32), sr
 
-    for i in range(num_chunks):
-        start_time = i * CHUNK_DURATION_SECONDS
-        try:
-            out, _ = (
-                ffmpeg
-                .input("pipe:0")
-                .output(
-                    "pipe:1",
-                    format="wav",
-                    ac=1,
-                    ar=TARGET_SAMPLE_RATE,
-                    ss=start_time,                                  # seek to chunk start
-                    t=CHUNK_DURATION_SECONDS,                       # take 10 seconds
-                    af=f"apad=whole_dur={CHUNK_DURATION_SECONDS}",  # pad with silence if short
-                )
-                .run(input=standardized_wav_bytes, capture_stdout=True, capture_stderr=True)
-            )
-            chunks.append(out)
-        except ffmpeg.Error as e:
-            raise ValueError(f"Chunking failed at chunk {i}: {e.stderr.decode()}")
 
-    return chunks
+def resample(x, sr_in, sr_out=TARGET_SR):
+    if sr_in == sr_out:
+        return x
+
+    from scipy.signal import resample_poly
+
+    ratio = Fraction(sr_out, sr_in).limit_denominator(1000)
+
+    return resample_poly(x, ratio.numerator, ratio.denominator)
+
+
+def frame_rms(x):
+    if len(x) < FRAME_LEN:
+        return np.array([np.sqrt(np.mean(x**2) + 1e-20)])
+
+    n = 1 + (len(x) - FRAME_LEN) // FRAME_HOP
+    idx = np.arange(FRAME_LEN)[None, :] + FRAME_HOP * np.arange(n)[:, None]
+
+    return np.sqrt(np.mean(x[idx] ** 2, axis=1) + 1e-20)
+
+
+def trim_silence(x, top_db=40.0, margin_s=0.05):
+    if len(x) < FRAME_LEN:
+        return x
+
+    frames = frame_rms(x)
+    peak = float(frames.max())
+
+    if peak <= 0:
+        return x
+
+    keep = np.flatnonzero(frames >= peak * (10.0 ** (-top_db / 20.0)))
+
+    if keep.size == 0:
+        return x
+
+    margin = int(margin_s * TARGET_SR)
+    start = max(0, keep[0] * FRAME_HOP - margin)
+    end = min(len(x), keep[-1] * FRAME_HOP + FRAME_LEN + margin)
+
+    return x[start:end]
+
+
+def normalise_level(x, peak_target):
+    peak_in = float(np.abs(x).max()) if x.size else 0.0
+
+    if peak_in <= 0:
+        return x.astype(np.float32), 0.0
+
+    gain_db = 20.0 * np.log10(peak_target / peak_in)
+    y = (x * (peak_target / peak_in)).astype(np.float32)
+
+    return y, float(gain_db)
+
+
+def _pcm16_roundtrip(x: np.ndarray) -> np.ndarray:
+    buf = io.BytesIO()
+    sf.write(buf, x, TARGET_SR, subtype="PCM_16", format="WAV")
+    buf.seek(0)
+    y, _ = sf.read(buf, always_2d=False)
+
+    return np.asarray(y, dtype=np.float32)
+
+
+def preprocess(x: np.ndarray, sr: int) -> np.ndarray:
+    x = resample(np.asarray(x, dtype=np.float64), sr).astype(np.float32)
+    x = trim_silence(x, TRIM_TOP_DB, TRIM_MARGIN_S)
+
+    if len(x) < FRAME_LEN or not np.any(x):
+        raise ValueError("The audio is silent or too short after trimming silence.")
+
+    x, _ = normalise_level(x, PEAK_TARGET)
+
+    return _pcm16_roundtrip(x)
+
+
+def repeat_pad(x: np.ndarray, length: int = SEGMENT_SAMPLES) -> np.ndarray:
+    if len(x) >= length:
+        return x[:length]
+
+    repeats = int(np.ceil(length / len(x)))
+
+    return np.tile(x, repeats)[:length]
+
+
+def split_into_segments(x: np.ndarray) -> list[dict]:
+    if len(x) <= SEGMENT_SAMPLES:
+        starts = [0]
+    else:
+        starts = list(range(0, len(x) - SEGMENT_SAMPLES + 1, SEGMENT_SAMPLES))
+        if starts[-1] + SEGMENT_SAMPLES < len(x):
+            starts.append(len(x) - SEGMENT_SAMPLES)
+
+    return [
+        {
+            "start_s": round(start / TARGET_SR, 2),
+            "end_s": round(min(start + SEGMENT_SAMPLES, len(x)) / TARGET_SR, 2),
+            "audio": repeat_pad(x[start : start + SEGMENT_SAMPLES]),
+        }
+        for start in starts
+    ]

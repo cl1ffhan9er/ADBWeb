@@ -14,3 +14,16 @@ starlette==1.6.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 uvicorn==0.52.4
+# CPU-only server: install torch first with
+#   pip install torch==2.8.0 torchaudio==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0
+deepfense==0.2.2
+transformers==4.55.4
+huggingface_hub
+omegaconf
+numpy<2.2
+scipy<1.16
+soundfile
+python-dotenv
