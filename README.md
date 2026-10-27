@@ -2,7 +2,7 @@
 
 A web-deployed audio deepfake detector for Cebuano speech. Users upload a `.wav` or `.mp3` clip and get back a classification — **Real** or **Fake** — along with an authenticity score, powered by a frozen XLS-R + AASIST model.
 
-Built as part of the study *Audio Deepfake Detection for Cebuano Speech Under Real-World Channel Conditions*.
+Built as part of the study _Audio Deepfake Detection for Cebuano Speech Under Real-World Channel Conditions_.
 
 ## Status
 
@@ -30,12 +30,12 @@ Communication between the two is internal HTTP (localhost only, not exposed exte
 
 ## Tech Stack
 
-| Layer | Tech |
-|---|---|
-| Frontend / Gateway | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
-| Inference | FastAPI, PyTorch, HuggingFace Transformers, ffmpeg-python |
-| Model | XLS-R (feature extraction) → AASIST (classification) |
-| Hosting | DCISM web server (Linux) |
+| Layer              | Tech                                                      |
+| ------------------ | --------------------------------------------------------- |
+| Frontend / Gateway | Next.js 16, React 19, TypeScript, Tailwind CSS v4         |
+| Inference          | FastAPI, PyTorch, HuggingFace Transformers, ffmpeg-python |
+| Model              | XLS-R (feature extraction) → AASIST (classification)      |
+| Hosting            | DCISM web server (Linux)                                  |
 
 ## Core Features
 
@@ -96,4 +96,4 @@ Full functional and non-functional requirements are documented in the project's 
 
 ## License
 
-TBD.
+Code: MIT (see LICENSE). The model weights are not included in this repository and are not covered by this license; they were trained on the Philippine Languages Database (CC BY-NC 4.0).
